@@ -1,0 +1,40 @@
+{
+  "peildatum": {
+    "maand": "juni",
+    "jaar": 2026,
+    "label": "juni 2026"
+  },
+  "wagenpark": {
+    "personenautos": {
+      "aantal": 745389,
+      "aandeel": 8
+    },
+    "lichteBedrijfsvoertuigen": {
+      "aantal": 62025,
+      "aandeel": 5.9
+    },
+    "zwareBedrijfsvoertuigen": {
+      "aantal": 2870,
+      "aandeel": 1.7
+    }
+  },
+  "nieuwverkoop": {
+    "personenautos": {
+      "jaar": 2026,
+      "aantal": 63037,
+      "aandeel": 37
+    },
+    "lichteBedrijfsvoertuigen": {
+      "jaar": 2026,
+      "aantal": 8863,
+      "aandeel": 80
+    },
+    "zwareBedrijfsvoertuigen": {
+      "jaar": 2026,
+      "aantal": 740,
+      "aandeel": 9
+    }
+  },
+  "bron": "https://www.rvo.nl/onderwerpen/elektrisch-vervoer/stand-van-zaken",
+  "bijgewerkt": "2026-08-29T15:11:15.772Z"
+}
