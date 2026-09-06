@@ -59,13 +59,43 @@ const MAANDEN = [
   "december",
 ];
 
-async function haal(params) {
+// De databank weigert kale bot-verzoeken, dus we sturen dezelfde headers als
+// een browser. Bij een netwerkfout proberen we het twee keer opnieuw.
+const HEADERS = {
+  "user-agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  accept: "application/json, text/javascript, */*; q=0.01",
+  "accept-language": "nl-NL,nl;q=0.9,en;q=0.8",
+  referer:
+    "https://duurzamevoertuigen.databank.nl/mosaic/nl-nl/elektrisch-vervoer/personenauto-s",
+};
+
+const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function haal(params, poging = 1) {
   const url = `${ENDPOINT}?${params}&lang=nl-nl`;
-  const res = await fetch(url, {
-    headers: { "user-agent": "SimpelDigitaal-RVO-bot" },
-  });
+  let res;
+  try {
+    res = await fetch(url, { headers: HEADERS, redirect: "follow" });
+  } catch (e) {
+    const oorzaak = e.cause ? ` (${e.cause.code || e.cause.message})` : "";
+    if (poging < 3) {
+      console.error(`Poging ${poging} mislukt${oorzaak}, opnieuw over 3 seconden`);
+      await wacht(3000);
+      return haal(params, poging + 1);
+    }
+    throw new Error(`Netwerkfout na ${poging} pogingen voor ${params}: ${e.message}${oorzaak}`);
+  }
   if (!res.ok) throw new Error(`Databank gaf status ${res.status} voor ${params}`);
-  const json = await res.json();
+  const tekst = await res.text();
+  let json;
+  try {
+    json = JSON.parse(tekst);
+  } catch {
+    throw new Error(
+      `Geen geldige JSON voor ${params}, eerste tekens: ${tekst.slice(0, 80)}`
+    );
+  }
   if (!json || !Array.isArray(json.data) || !json.data.length) {
     throw new Error(`Lege respons voor ${params}`);
   }
@@ -233,6 +263,7 @@ async function main() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((e) => {
     console.error(e.message);
+    if (e.cause) console.error("Oorzaak:", e.cause.code || e.cause.message);
     process.exit(1);
   });
 }
