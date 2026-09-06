@@ -1,152 +1,200 @@
-// Haalt de RVO-pagina "Stand van zaken elektrisch vervoer en laadpunten" op,
-// leest de cijfers en de peildatum uit en schrijft data/data.json.
+// Haalt de actuele cijfers over elektrische voertuigen op uit de databank van
+// RVO (duurzamevoertuigen.databank.nl) en schrijft docs/data.json.
+//
+// Bron per categorie zijn dezelfde variabelen die de dashboards zelf gebruiken:
+//   aantal   var=kb_wagenpark met dimmember voertuigsoort + aandrijflijn BEV
+//   totaal   var=kb_wagenpark met alleen dimmember voertuigsoort
+//   aandeel  var=wp_<categorie>_new_bev_tov_tot, inclusief de peildatum
+//
 // Draait op Node 20+ zonder dependencies.
 
 import { readFile, writeFile } from "node:fs/promises";
 
-const BRON = "https://www.rvo.nl/onderwerpen/elektrisch-vervoer/stand-van-zaken";
+const ENDPOINT =
+    "https://duurzamevoertuigen.databank.nl/viewer/selectiontojson.ashx";
+const BRON = "https://duurzamevoertuigen.databank.nl/mosaic/nl-nl/elektrisch-vervoer";
 const UIT = new URL("./docs/data.json", import.meta.url);
 
-// Maximaal toegestane daling t.o.v. de vorige meting, als veiligheidscheck.
-const MAX_DALING = 0.05;
+// Grenzen voor de veiligheidscontroles.
+const MAX_DALING = 0.05; // aantal mag niet meer dan 5% dalen
+const MAX_STIJGING = 0.5; // en niet meer dan 50% stijgen
+const MAX_AANDEEL_AFWIJKING = 0.3; // procentpunt tussen berekend en opgehaald aandeel
 
-export function naarTekst(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/g, " ")
-    .replace(/&rsquo;|&lsquo;|&apos;|&#39;|&#039;|&#8216;|&#8217;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/[\u2018\u2019\u02BC]/g, "'")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const CATEGORIEEN = [
+  {
+    sleutel: "personenautos",
+    naam: "personenauto's",
+    voertuigsoort: "dnc_voertuig_srt_pa",
+    aandrijflijn: "dnc_aandrfln6cat_bev",
+    aandeelVar: "wp_pa_new_bev_tov_tot",
+  },
+  {
+    sleutel: "lichteBedrijfsvoertuigen",
+    naam: "lichte bedrijfsvoertuigen",
+    voertuigsoort: "dnc_voertuig_srt_lb",
+    aandrijflijn: "dnc_aandrfln4cat_bev",
+    aandeelVar: "wp_lb_new_bev_tov_tot",
+  },
+  {
+    sleutel: "zwareBedrijfsvoertuigen",
+    naam: "zware bedrijfsvoertuigen",
+    voertuigsoort: "dnc_voertuig_srt_zb",
+    aandrijflijn: "dnc_aandrfln4cat_bev",
+    aandeelVar: "wp_zb_new_bev_tov_tot",
+  },
+];
+
+const MAANDEN = [
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
+];
+
+async function haal(params) {
+  const url = `${ENDPOINT}?${params}&lang=nl-nl`;
+  const res = await fetch(url, {
+    headers: { "user-agent": "SimpelDigitaal-RVO-bot" },
+  });
+  if (!res.ok) throw new Error(`Databank gaf status ${res.status} voor ${params}`);
+  const json = await res.json();
+  if (!json || !Array.isArray(json.data) || !json.data.length) {
+    throw new Error(`Lege respons voor ${params}`);
+  }
+  return json;
 }
 
-const getal = (s) => Number(s.replace(/\./g, ""));
-const procent = (s) => Number(s.replace(",", "."));
-
-function zoek(tekst, patroon, label) {
-  const m = tekst.match(patroon);
-  if (!m) throw new Error(`Niet gevonden op de RVO-pagina: ${label}`);
-  return m;
-}
-
-export function parse(html) {
-  const t = naarTekst(html);
-
-  const peil = zoek(
-    t,
-    /op peildatum\s+([A-Za-zé]+)\s+(\d{4})/i,
-    "peildatum"
+// De databank negeert een onbekende dimmember zonder foutmelding en geeft dan
+// een ander (hoger) getal terug. Daarom controleren we of de gevraagde
+// voertuigsoort echt in de respons staat.
+function bevatCode(json, code) {
+  return (json.dimensions || []).some((d) =>
+    (d.items || []).some((i) => i.c === code)
   );
+}
 
-  const rij = (soort, labelWegen) => {
-    const a = zoek(
-      t,
-      new RegExp(
-        `elektrische ${soort} op de Nederlandse wegen is:\\s*([\\d.]+)`,
-        "i"
-      ),
-      `aantal ${labelWegen}`
-    );
-    const p = zoek(
-      t,
-      new RegExp(
-        `elektrische ${soort} op de Nederlandse wegen is:\\s*[\\d.]+\\s*Dit is\\s*([\\d,]+)%`,
-        "i"
-      ),
-      `aandeel ${labelWegen}`
-    );
-    return { aantal: getal(a[1]), aandeel: procent(p[1]) };
-  };
+function waarde(json) {
+  const cel = json.data[0][0];
+  const n = Number(cel.v);
+  if (!Number.isFinite(n)) throw new Error(`Onleesbare waarde: ${cel.v}`);
+  return n;
+}
 
-  const nieuw = (soort, label) => {
-    const a = zoek(
-      t,
-      new RegExp(
-        `nieuw verkochte elektrische ${soort} in (\\d{4}) is:\\s*([\\d.]+)`,
-        "i"
-      ),
-      `nieuwverkoop ${label}`
+function peildatumUit(json) {
+  const dim = (json.dimensions || []).find((d) => d.type === "period");
+  const item = dim && dim.items && dim.items[0];
+  if (!item) throw new Error("Geen peildatum in de respons");
+  const m = String(item.c).match(/^m(\d{1,2})y(\d{4})$/);
+  if (!m) throw new Error(`Onbekende peildatumcode: ${item.c}`);
+  const maandNr = Number(m[1]);
+  const jaar = Number(m[2]);
+  if (maandNr < 1 || maandNr > 12) throw new Error(`Onbekende maand: ${item.c}`);
+  const maand = MAANDEN[maandNr - 1];
+  return { maand, maandNr, jaar, label: `${maand} ${jaar}`, code: item.c };
+}
+
+export async function haalCategorie(cat) {
+  const aantalJson = await haal(
+    `var=kb_wagenpark&dimmember=${cat.voertuigsoort},${cat.aandrijflijn}`
+  );
+  const totaalJson = await haal(
+    `var=kb_wagenpark&dimmember=${cat.voertuigsoort}`
+  );
+  const aandeelJson = await haal(`var=${cat.aandeelVar}`);
+
+  for (const [json, label] of [
+    [aantalJson, "aantal"],
+    [totaalJson, "totaal"],
+  ]) {
+    if (!bevatCode(json, cat.voertuigsoort)) {
+      throw new Error(
+        `${cat.naam}: voertuigsoort ${cat.voertuigsoort} niet herkend in de ${label}-respons`
+      );
+    }
+  }
+
+  const aantal = waarde(aantalJson);
+  const totaal = waarde(totaalJson);
+  const aandeel = waarde(aandeelJson);
+  const peildatum = peildatumUit(aandeelJson);
+
+  if (aantal <= 0) throw new Error(`${cat.naam}: aantal is ${aantal}`);
+  if (totaal <= aantal) {
+    throw new Error(
+      `${cat.naam}: aantal ${aantal} is niet kleiner dan het totale wagenpark ${totaal}, de aandrijflijnfilter lijkt genegeerd`
     );
-    const p = zoek(
-      t,
-      new RegExp(
-        `nieuw verkochte elektrische ${soort} in \\d{4} is:\\s*[\\d.]+\\s*Dit is\\s*([\\d,]+)%`,
-        "i"
-      ),
-      `nieuwverkoop-aandeel ${label}`
+  }
+
+  // Kruiscontrole: het zelf berekende aandeel moet overeenkomen met het
+  // opgehaalde aandeel. Wijkt het af, dan is er iets mis met een van de drie
+  // opvragingen en publiceren we niets.
+  const berekend = (aantal / totaal) * 100;
+  if (Math.abs(berekend - aandeel) > MAX_AANDEEL_AFWIJKING) {
+    throw new Error(
+      `${cat.naam}: berekend aandeel ${berekend.toFixed(2)}% wijkt af van opgehaald aandeel ${aandeel.toFixed(2)}%`
     );
-    return { jaar: Number(a[1]), aantal: getal(a[2]), aandeel: procent(p[1]) };
-  };
+  }
 
   return {
-    peildatum: {
-      maand: peil[1].toLowerCase(),
-      jaar: Number(peil[2]),
-      label: `${peil[1].toLowerCase()} ${peil[2]}`,
+    sleutel: cat.sleutel,
+    peildatum,
+    cijfers: {
+      aantal,
+      aandeel: Math.round(aandeel * 10) / 10,
+      totaalWagenpark: totaal,
     },
-    wagenpark: {
-      personenautos: rij("personenauto's", "personenauto's"),
-      lichteBedrijfsvoertuigen: rij(
-        "lichte bedrijfsvoertuigen",
-        "lichte bedrijfsvoertuigen"
-      ),
-      zwareBedrijfsvoertuigen: rij(
-        "zware bedrijfsvoertuigen",
-        "zware bedrijfsvoertuigen"
-      ),
-    },
-    nieuwverkoop: {
-      personenautos: nieuw("personenauto's", "personenauto's"),
-      lichteBedrijfsvoertuigen: nieuw(
-        "lichte bedrijfsvoertuigen",
-        "lichte bedrijfsvoertuigen"
-      ),
-      zwareBedrijfsvoertuigen: nieuw(
-        "zware bedrijfsvoertuigen",
-        "zware bedrijfsvoertuigen"
-      ),
-    },
-    bron: BRON,
-    bijgewerkt: new Date().toISOString(),
   };
 }
 
 export function controleer(nieuwData, oudData) {
   const fouten = [];
-  const paren = [
-    ["wagenpark", "personenautos"],
-    ["wagenpark", "lichteBedrijfsvoertuigen"],
-    ["wagenpark", "zwareBedrijfsvoertuigen"],
-  ];
-
-  for (const [groep, sleutel] of paren) {
-    const n = nieuwData[groep][sleutel].aantal;
-    if (!Number.isFinite(n) || n <= 0) {
-      fouten.push(`${sleutel}: onbruikbaar aantal (${n})`);
-      continue;
+  for (const cat of CATEGORIEEN) {
+    const n = nieuwData.wagenpark[cat.sleutel].aantal;
+    const o = oudData?.wagenpark?.[cat.sleutel]?.aantal;
+    if (!o) continue;
+    if (n < o * (1 - MAX_DALING)) {
+      fouten.push(`${cat.naam}: daalt van ${o} naar ${n}`);
     }
-    const o = oudData?.[groep]?.[sleutel]?.aantal;
-    if (o && n < o * (1 - MAX_DALING)) {
-      fouten.push(
-        `${sleutel}: daalt van ${o} naar ${n}, meer dan ${MAX_DALING * 100}%`
-      );
+    if (n > o * (1 + MAX_STIJGING)) {
+      fouten.push(`${cat.naam}: stijgt van ${o} naar ${n}`);
     }
   }
   return fouten;
 }
 
 async function main() {
-  const res = await fetch(BRON, {
-    headers: { "user-agent": "SimpelDigitaal-RVO-bot" },
-  });
-  if (!res.ok) throw new Error(`RVO gaf status ${res.status}`);
-  const html = await res.text();
+  const resultaten = [];
+  for (const cat of CATEGORIEEN) {
+    resultaten.push(await haalCategorie(cat));
+  }
 
-  const nieuwData = parse(html);
+  // Alle categorieen horen dezelfde peildatum te hebben.
+  const codes = [...new Set(resultaten.map((r) => r.peildatum.code))];
+  if (codes.length !== 1) {
+    throw new Error(`Categorieen hebben verschillende peildatums: ${codes.join(", ")}`);
+  }
+
+  const nieuwData = {
+    peildatum: {
+      maand: resultaten[0].peildatum.maand,
+      jaar: resultaten[0].peildatum.jaar,
+      label: resultaten[0].peildatum.label,
+      code: resultaten[0].peildatum.code,
+    },
+    wagenpark: Object.fromEntries(
+      resultaten.map((r) => [r.sleutel, r.cijfers])
+    ),
+    bron: BRON,
+    bijgewerkt: new Date().toISOString(),
+  };
 
   let oudData = null;
   try {
@@ -171,7 +219,15 @@ async function main() {
   }
 
   await writeFile(UIT, JSON.stringify(nieuwData, null, 2) + "\n");
-  console.log("Bijgewerkt naar peildatum " + nieuwData.peildatum.label);
+  console.log(
+    "Bijgewerkt naar peildatum " +
+      nieuwData.peildatum.label +
+      ": " +
+      CATEGORIEEN.map(
+        (c) =>
+          `${c.naam} ${nieuwData.wagenpark[c.sleutel].aantal} (${nieuwData.wagenpark[c.sleutel].aandeel}%)`
+      ).join(", ")
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
