@@ -1,40 +1,27 @@
 {
   "peildatum": {
-    "maand": "juni",
+    "maand": "juli",
     "jaar": 2026,
-    "label": "juni 2026"
+    "label": "juli 2026",
+    "code": "m7y2026"
   },
   "wagenpark": {
     "personenautos": {
-      "aantal": 745389,
-      "aandeel": 8
+      "aantal": 757165,
+      "aandeel": 8.1,
+      "totaalWagenpark": 9368055
     },
     "lichteBedrijfsvoertuigen": {
-      "aantal": 62025,
-      "aandeel": 5.9
+      "aantal": 63947,
+      "aandeel": 6,
+      "totaalWagenpark": 1057594
     },
     "zwareBedrijfsvoertuigen": {
-      "aantal": 2870,
-      "aandeel": 1.7
+      "aantal": 2987,
+      "aandeel": 1.8,
+      "totaalWagenpark": 164522
     }
   },
-  "nieuwverkoop": {
-    "personenautos": {
-      "jaar": 2026,
-      "aantal": 63037,
-      "aandeel": 37
-    },
-    "lichteBedrijfsvoertuigen": {
-      "jaar": 2026,
-      "aantal": 8863,
-      "aandeel": 80
-    },
-    "zwareBedrijfsvoertuigen": {
-      "jaar": 2026,
-      "aantal": 740,
-      "aandeel": 9
-    }
-  },
-  "bron": "https://www.rvo.nl/onderwerpen/elektrisch-vervoer/stand-van-zaken",
-  "bijgewerkt": "2026-08-29T15:11:15.772Z"
+  "bron": "https://duurzamevoertuigen.databank.nl/mosaic/nl-nl/elektrisch-vervoer",
+  "bijgewerkt": "2026-09-06T00:00:00.000Z"
 }
