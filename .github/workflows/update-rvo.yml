@@ -2,6 +2,7 @@ name: Update RVO-cijfers
 
 on:
   schedule:
+    # Elke dag om 06:15 Nederlandse tijd (05:15 UTC).
     - cron: "15 5 * * *"
   workflow_dispatch:
 
@@ -18,21 +19,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Test welke route wel werkt
-        continue-on-error: true
-        run: |
-          DOEL="https://duurzamevoertuigen.databank.nl/viewer/selectiontojson.ashx?var=wp_pa_new_bev_tov_tot&lang=nl-nl"
-          ENC=$(node -p "encodeURIComponent(process.argv[1])" "$DOEL")
-          probeer () {
-            echo "-- $1"
-            curl -sS -m 30 -o /tmp/p.json -w "status %{http_code} in %{time_total}s\n" "$2" || echo "faalde"
-            head -c 150 /tmp/p.json 2>/dev/null; echo; echo
-          }
-          probeer "allorigins" "https://api.allorigins.win/raw?url=$ENC"
-          probeer "corsproxy" "https://corsproxy.io/?url=$ENC"
-          probeer "codetabs" "https://api.codetabs.com/v1/proxy?quest=$ENC"
-
       - name: Cijfers ophalen
+        env:
+          PROXY_BASE: ${{ vars.PROXY_BASE }}
         run: node scrape.mjs
 
       - name: Wijziging vastleggen
