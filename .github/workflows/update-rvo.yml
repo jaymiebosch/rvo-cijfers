@@ -1,0 +1,35 @@
+name: Update RVO-cijfers
+
+on:
+  schedule:
+    # Elke dag om 06:15 Nederlandse tijd (05:15 UTC).
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cijfers ophalen
+        run: node scrape.mjs
+
+      - name: Wijziging vastleggen
+        run: |
+          if [ -n "$(git status --porcelain docs/data.json)" ]; then
+            git config user.name "rvo-bot"
+            git config user.email "actions@github.com"
+            git add docs/data.json
+            git commit -m "Cijfers bijgewerkt naar $(node -p "require('./docs/data.json').peildatum.label")"
+            git push
+          else
+            echo "Geen wijziging."
+          fi
