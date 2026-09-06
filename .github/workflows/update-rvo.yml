@@ -19,6 +19,22 @@ jobs:
         with:
           node-version: 20
 
+      - name: Diagnose bereikbaarheid databank
+        continue-on-error: true
+        run: |
+          URL="https://duurzamevoertuigen.databank.nl/viewer/selectiontojson.ashx?var=wp_pa_new_bev_tov_tot&lang=nl-nl"
+          echo "== DNS =="
+          getent hosts duurzamevoertuigen.databank.nl || echo "geen DNS-antwoord"
+          echo "== TCP poort 443 =="
+          timeout 15 bash -c 'cat < /dev/null > /dev/tcp/duurzamevoertuigen.databank.nl/443' && echo "poort 443 open" || echo "poort 443 dicht of getimeout"
+          echo "== curl met browser-UA =="
+          curl -sS -m 25 -4 -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36" -o /tmp/o.json -w "status %{http_code} in %{time_total}s\n" "$URL" || echo "curl faalde"
+          echo "== eerste tekens =="
+          head -c 200 /tmp/o.json 2>/dev/null || echo "geen inhoud"
+          echo
+          echo "== controle rvo.nl =="
+          curl -sS -m 20 -o /dev/null -w "rvo.nl status %{http_code}\n" https://www.rvo.nl/onderwerpen/elektrisch-vervoer/stand-van-zaken || echo "rvo.nl faalde"
+
       - name: Cijfers ophalen
         run: node scrape.mjs
 
