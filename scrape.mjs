@@ -15,6 +15,11 @@ const ENDPOINT =
 const BRON = "https://duurzamevoertuigen.databank.nl/mosaic/nl-nl/elektrisch-vervoer";
 const UIT = new URL("./docs/data.json", import.meta.url);
 
+// De databank blokkeert verkeer vanaf de GitHub-servers. Staat de repository
+// variable PROXY_BASE ingevuld (de Cloudflare Worker), dan loopt het verkeer
+// daar langs. Is die leeg, dan gaat het rechtstreeks.
+const PROXY_BASE = (process.env.PROXY_BASE || "").replace(/\/$/, "");
+
 // Grenzen voor de veiligheidscontroles.
 const MAX_DALING = 0.05; // aantal mag niet meer dan 5% dalen
 const MAX_STIJGING = 0.5; // en niet meer dan 50% stijgen
@@ -73,7 +78,8 @@ const HEADERS = {
 const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function haal(params, poging = 1) {
-  const url = `${ENDPOINT}?${params}&lang=nl-nl`;
+  const basis = PROXY_BASE || ENDPOINT;
+  const url = `${basis}?${params}&lang=nl-nl`;
   let res;
   try {
     res = await fetch(url, { headers: HEADERS, redirect: "follow" });
