@@ -1,27 +1,27 @@
 {
   "peildatum": {
-    "maand": "augustus",
+    "maand": "september",
     "jaar": 2026,
-    "label": "augustus 2026",
-    "code": "m8y2026"
+    "label": "september 2026",
+    "code": "m9y2026"
   },
   "wagenpark": {
     "personenautos": {
-      "aantal": 770453,
-      "aandeel": 8.2,
-      "totaalWagenpark": 9377745
+      "aantal": 789571,
+      "aandeel": 8.4,
+      "totaalWagenpark": 9391319
     },
     "lichteBedrijfsvoertuigen": {
-      "aantal": 66080,
-      "aandeel": 6.2,
-      "totaalWagenpark": 1057489
+      "aantal": 68315,
+      "aandeel": 6.5,
+      "totaalWagenpark": 1056484
     },
     "zwareBedrijfsvoertuigen": {
-      "aantal": 3081,
-      "aandeel": 1.9,
-      "totaalWagenpark": 164303
+      "aantal": 3215,
+      "aandeel": 2,
+      "totaalWagenpark": 164391
     }
   },
   "bron": "https://duurzamevoertuigen.databank.nl/mosaic/nl-nl/elektrisch-vervoer",
-  "bijgewerkt": "2026-09-11T09:00:32.466Z"
+  "bijgewerkt": "2026-10-09T11:52:15.619Z"
 }
